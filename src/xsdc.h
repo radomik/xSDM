@@ -85,24 +85,25 @@ typedef struct unpackdata_t
 
 typedef enum
 {
-  FUS_OK = 0,	//success
-  FUS_NFND,	//substring '^^' not found in edv
-  FUS_LNG,	//length of a string doesn't match expected length
-  FUS_NAN,	//one of numbers wasn't number at all
-  FUS_ERROR	//unidentified error
+  FUS_OK = 0,   //success
+  FUS_NFND, //substring '^^' not found in edv
+  FUS_LNG,  //length of a string doesn't match expected length
+  FUS_NAN,  //one of numbers wasn't number at all
+  FUS_ERROR //unidentified error
 } UnpackStatus;
 
 typedef enum
 {
   DD_OK = 0,
-  DD_AO,	//module opening error
-  DD_IE,	//encryption init error
-  DD_DE,	//decryption error
-  DD_DIE,	//encryption deinit error
-  DD_ERR	//uidentified error
+  DD_AO,    //module opening error
+  DD_IE,    //encryption init error
+  DD_DE,    //decryption error
+  DD_DIE,   //encryption deinit error
+  DD_HD,    //header read error
+  DD_ERR    //uidentified error
 } DecrError;
 
-typedef enum 
+typedef enum
 {
   PH_LONG = 0,
   PH_SHORT
@@ -167,12 +168,12 @@ uint64_t winTimeToUnix(uint64_t win);
  * converts unix timestamp to string in format "%Y/%m/%d %H:%M:%S"
  * if BUFSZIE is too small returns empty string
  */
-void unixTimeToStr(char *buffer, size_t bufSize, uint64_t time);
+void unixTimeToStr(char *buffer, size_t bufSize, time_t time);
 
 /*
  * create directory, if its root directory does not exist, create it recursively
  */
-int createDir(char* dir);
+int createDir(const char* dir);
 
 /*
  * print progress of current task (0-6)

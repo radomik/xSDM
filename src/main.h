@@ -22,6 +22,7 @@
 #define EXIT_SUCCESS    0
 #define EXIT_INVALIDOPT 1
 #define EXIT_TOOLESS    2
+#define EXIT_OTHERERROR 99
 
 static struct option options [] =
 {

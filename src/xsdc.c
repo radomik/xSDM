@@ -29,7 +29,7 @@ void print_version()
         "This is free software: you are free to change and redistribute it.\n"
         "There is NO WARRANTY, to the extent permitted by law.\n\n"
         "Written by %s.\n"
-	"With contribution of GMMan (reverse engineering the rest of SDC file).\n",
+    "With contribution of GMMan (reverse engineering the rest of SDC file).\n",
         PACKAGE,
         VERSION,
         "v3l0c1r4pt0r"
@@ -44,8 +44,8 @@ void xorBuffer(uint8_t factor, unsigned char *buffer, uint32_t bufferSize)
         buffer[i] ^= factor;
     }
 }
-
 UnpackStatus fillUnpackStruct(UnpackData *unpackData, void *edv)
+
 {
     UnpackData ud;
     ud.unformatted = edv;
@@ -72,13 +72,8 @@ UnpackStatus fillUnpackStruct(UnpackData *unpackData, void *edv)
 
 uint32_t getDataOutputSize(uint32_t inputSize)
 {
-    uint32_t size;
-
-    size = inputSize % 8;
-    if (size != 0)
-        return inputSize + 8 - size;
-    else
-        return inputSize;
+    uint32_t size = inputSize % 8;
+    return (size != 0) ? inputSize + 8 - size : inputSize;
 }
 
 DecrError decryptData(void *buffer, uint32_t *bufferSize, void *outputBuffer, void *key, uint32_t keyLength)
@@ -126,7 +121,7 @@ DecrError decryptData(void *buffer, uint32_t *bufferSize, void *outputBuffer, vo
 
 ulong countCrc(FILE *f, uint32_t hdrSize)
 {
-    void *buffer = malloc(0x1000);
+    char buffer[0x1000];
     uLong crc = crc32(0L, Z_NULL, 0);
     fseek(f, hdrSize+4, SEEK_SET);
     size_t bytes = 0;
@@ -134,14 +129,17 @@ ulong countCrc(FILE *f, uint32_t hdrSize)
     {
         crc = crc32(crc, (Bytef*)buffer, bytes);
     }
-    free(buffer);
     return crc;
 }
 
 DecrError loadHeader(FILE *f, Header *hdr, uint32_t hdrSize, UnpackData *ud)
 {
     void *data = malloc(hdrSize);
-    fread(data,1,hdrSize,f);
+    if (fread(data,1,hdrSize,f) != hdrSize)
+    {
+        free(data);
+        return DD_HD;
+    }
     DecrError err = decryptData(data, &hdrSize, hdr, ud->headerKey, 32);
     free(data);
     return err;
@@ -158,12 +156,12 @@ void dosPathToUnix(char* path)
 
 uint64_t winTimeToUnix(uint64_t win)
 {
-    return (win / 10000000) - 	//granularity: 100 nansec ( * 10^2); to seconds ( * 10^-9)
-           11644473600 - 	//difference between 1601 and 1970 in seconds
-           5040;		//fixing
+    return (win / 10000000) -   //granularity: 100 nansec ( * 10^2); to seconds ( * 10^-9)
+           11644473600 -    //difference between 1601 and 1970 in seconds
+           5040;        //fixing
 }
 
-void unixTimeToStr(char *buffer, size_t bufSize, uint64_t time)
+void unixTimeToStr(char *buffer, size_t bufSize, time_t time)
 {
     if(bufSize < 20)
     {
@@ -174,7 +172,7 @@ void unixTimeToStr(char *buffer, size_t bufSize, uint64_t time)
     strftime(buffer, bufSize, "%Y/%m/%d %H:%M:%S", ts);
 }
 
-int createDir(char* dir)
+int createDir(const char* dir)
 {
     DIR *f = NULL;
     if((f = opendir(dir)) == NULL)
@@ -187,8 +185,9 @@ int createDir(char* dir)
                 size_t baselen = strlen(dir);
                 char *base = (char*)malloc(baselen + 1);
                 strcpy(base, dir);
-                base = dirname(base);
-                int ret = createDir(base);
+                const char* constBase = dirname(base);
+                int ret = createDir(constBase);
+                free(base);
                 if(!ret)
                 {
                     if(mkdir(dir,S_IRWXU | S_IRWXG | S_IROTH | S_IWOTH | S_IXOTH) != 0)
@@ -213,7 +212,6 @@ int createDir(char* dir)
         // directory exists
         closedir(f);
     }
-    f = NULL;
     return 0;
 }
 
