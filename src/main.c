@@ -10,7 +10,9 @@ static unsigned char* data;
 static unsigned char* input;
 static unsigned char* output;
 static char* outFile;
+static char* sdcDir;
 static void* tmp;
+static void* dirName;
 
 static int onexit(int retVal)
 {
@@ -24,7 +26,9 @@ static int onexit(int retVal)
     if (input) free(input);
     if (output) free(output);
     if (outFile) free(outFile);
+    if (sdcDir) free(sdcDir);
     if (tmp) free(tmp);
+    if (dirName) free(dirName);
 
     exit(retVal);
     return retVal;
@@ -251,22 +255,22 @@ int main(int argc, char **argv)
 
         dosPathToUnix(filename);
 
-        void *dirName = malloc(fn_size + 1);
+        dirName = realloc(dirName, fn_size + 1);
         strcpy((char*)dirName,filename);
-        dirName = dirname((char*)dirName);
+        const char* constDirName = dirname((char*)dirName); // do not free pointer returned by dirname()
 
         char *baseName = basename(filename);
 
         //get sdc location
-        char *sdcDir = (char*)malloc(strlen(sdcFile)+1);
+        sdcDir = (char*)realloc(sdcDir, strlen(sdcFile)+1);
         strcpy(sdcDir,sdcFile);
-        sdcDir = dirname(sdcDir);
+        const char* constSdcDir = dirname(sdcDir);
 
-        print_status("Creating directory structure at '%s'", dirName);
+        print_status("Creating directory structure at '%s'", constDirName);
 
         //create directory according to header
-        outFile = (char*)realloc(outFile, strlen(sdcDir)+strlen((char*)dirName)+2);
-        sprintf(outFile,"%s/%s",sdcDir,(char*)dirName);
+        outFile = (char*)realloc(outFile, strlen(constSdcDir)+strlen(constDirName)+2);
+        sprintf(outFile,"%s/%s",constSdcDir,constDirName);
         int ret = createDir(outFile);
         if(ret != 0)
         {
@@ -298,8 +302,8 @@ int main(int argc, char **argv)
         print_status("Unpacking '%s'", baseName);
 
         //open output file
-        outFile = (char*)realloc(outFile, strlen(sdcDir)+strlen((char*)dirName)+strlen(baseName)+3);
-        sprintf(outFile,"%s/%s/%s",sdcDir,(char*)dirName,baseName);
+        outFile = (char*)realloc(outFile, strlen(constSdcDir)+strlen(constDirName)+strlen(baseName)+3);
+        sprintf(outFile,"%s/%s/%s",constSdcDir,constDirName,baseName);
         out = fopen(outFile,"w");
         if(out == NULL)
         {
@@ -308,12 +312,6 @@ int main(int argc, char **argv)
             perror(outFile);
             return onexit(errno);
         }
-
-        //memory cleanup
-        //free(sdcDir);//FIXME: SIGABRT
-        sdcDir = NULL;
-        free(dirName);
-        dirName = NULL;
 
         //ensure we are after header
         int r;

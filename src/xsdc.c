@@ -187,8 +187,9 @@ int createDir(char* dir)
                 size_t baselen = strlen(dir);
                 char *base = (char*)malloc(baselen + 1);
                 strcpy(base, dir);
-                base = dirname(base);
-                int ret = createDir(base);
+                const char* constBase = dirname(base);
+                int ret = createDir(constBase);
+                free(base);
                 if(!ret)
                 {
                     if(mkdir(dir,S_IRWXU | S_IRWXG | S_IROTH | S_IWOTH | S_IXOTH) != 0)
