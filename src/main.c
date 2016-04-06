@@ -1,11 +1,41 @@
 #include "main.h"
 
+static FILE* hdrout;
+static FILE* in;
+static FILE* out;
+static void* keyFileName;
+static void* unformatted;
+static Header* header;
+static unsigned char* data;
+static unsigned char* input;
+static unsigned char* output;
+static char* outFile;
+static void* tmp;
+
+static int onexit(int retVal)
+{
+    if (hdrout) fclose(hdrout);
+    if (in) fclose(in);
+    if (out) fclose(out);
+    if (keyFileName) free(keyFileName);
+    if (unformatted) free(unformatted);
+    if (header) free(header);
+    if (data) free(data);
+    if (input) free(input);
+    if (output) free(output);
+    if (outFile) free(outFile);
+    if (tmp) free(tmp);
+
+    exit(retVal);
+    return retVal;
+}
+
 int main(int argc, char **argv)
 {
     //TODO: get rid of mem leaks (valgrind)
+    //For now should be _reliably_ done with manual code analysis/correction
     uint8_t flags = 0;
     const char *sdcFile = NULL;
-    FILE *hdrout = NULL;
     int option;
     while((option = getopt_long(argc, argv, "fvH:Vh", options, 0)) != -1)
     {
@@ -30,23 +60,26 @@ int main(int argc, char **argv)
             {
                 //error opening a file
                 print_fail();
+                // note that perror() here may not print errno from unsuccessful
+                // call to fopen() because print_fail() (printf()) may change its
+                // value to SUCCESS
+                // perror argument type is const char*
                 perror(hdrout);
-                return errno;
+                return onexit(errno);
             }
             print_ok();
             break;
         //version
         case 'V':
             print_version();
-            return EXIT_SUCCESS;
+            return onexit(EXIT_SUCCESS);
         //help
         case 'h':
             print_help(PH_LONG,argv[0]);
-            return EXIT_SUCCESS;
-            break;
+            return onexit(EXIT_SUCCESS);
         default:
             print_help(PH_SHORT,argv[0]);
-            return EXIT_INVALIDOPT;
+            return onexit(EXIT_INVALIDOPT);
         }
     }
     if((argc - optind) == 1)
@@ -57,23 +90,23 @@ int main(int argc, char **argv)
     else
     {
         print_help(PH_SHORT,argv[0]);
-        return EXIT_TOOLESS;
+        return onexit(EXIT_TOOLESS);
     }
 
     print_status("Opening SDC file");
     int result;
-    FILE *in = fopen(sdcFile,"r");
+    in = fopen(sdcFile,"r");
     if(in == NULL)
     {
         //error opening a file
         print_fail();
         perror(sdcFile);
-        return errno;
+        return onexit(errno);
     }
     print_ok();
 
     //open key file
-    void *keyFileName = malloc(strlen(sdcFile)+5);
+    keyFileName = malloc(strlen(sdcFile)+5);
     sprintf((char*)keyFileName,"%s.key",sdcFile);
     FILE *key = fopen((char*)keyFileName,"r");
     if(key == NULL)
@@ -81,7 +114,7 @@ int main(int argc, char **argv)
         //error opening a file
         print_fail();
         perror((char*)keyFileName);
-        return errno;
+        return onexit(errno);
     }
 
     print_status("Verifying keyfile");
@@ -90,10 +123,11 @@ int main(int argc, char **argv)
     fseek(key,0,SEEK_END);
     int unformattedLength = ftell(key);
     fseek(key,0,SEEK_SET);
-    void *unformatted = malloc(unformattedLength+1);
+    unformatted = malloc(unformattedLength+1);
     fread(unformatted,1,unformattedLength,key);
     ((unsigned char *)unformatted)[unformattedLength] = '\0';
     fclose(key);
+    key = NULL;
 
     //fill unpack structure
     UnpackData unpackData;
@@ -106,48 +140,48 @@ int main(int argc, char **argv)
     default:
         print_fail();
         fprintf(stderr, "%s: Wrong format of a keyfile!\n", argv[0]);
-        return us;
+        return onexit(us);
     }
 
     //load header size
-    uint8_t *hdrSizeBuff = (uint8_t*)malloc(4);
-    fread(hdrSizeBuff,1,4,in);
-    uint32_t headerSize = *(uint32_t*)hdrSizeBuff;
-    free(hdrSizeBuff);
-    hdrSizeBuff = NULL;
+    union {
+        uint8_t  buf[4];
+        uint32_t size;
+    } hdr;
+    fread(hdr.buf,1,4,in);
 
     print_status("Validating SDC header");
 
     //check header length
-    if(headerSize < 0xff)
+    if(hdr.size < 0xff)
     {
         //it is not length but signature!
         print_fail();
         fprintf(stderr,
               "%s: Encountered unsupported format! Signature is probably "
-              "0x%02x\n", argv[0], headerSize);
-      return -1;
+              "0x%02x\n", argv[0], hdr.size);
+        return onexit(-1);
     }
 
     //load and decode header
-    Header *header = (Header*)malloc(headerSize);
-    DecrError err = loadHeader(in, header, headerSize, &unpackData);
+    Header *header = (Header*)malloc(hdr.size);
+    DecrError err = loadHeader(in, header, hdr.size, &unpackData);
     if(err != DD_OK)
     {
         print_fail();
         fprintf(stderr, "%s: Error when decrypting SDC header (errorcode: %d)\n", argv[0], err);
-        return err;
+        return onexit(err);
     }
 
     //check if valid sdc file
     fseeko(in,0,SEEK_END);
     off_t sdcSize = ftello(in);//FIXME: check if still needed
-    if((sizeof(Header) + (sizeof(File) * header->headerSize)) > headerSize)
+    if((sizeof(Header) + (sizeof(File) * header->headerSize)) > hdr.size)
     {
         printf("[ FAIL ]\n");
         fprintf(stderr, "%s: File given is not valid SDC file or decryption key wrong\n", argv[0]);
         if(! (flags & F_FORCE))
-            return -1;
+            return onexit(-1);
     }
 
     print_ok();
@@ -155,7 +189,7 @@ int main(int argc, char **argv)
     print_status("Checking file integrity");
 
     //count crc32
-    uLong crc = countCrc(in, headerSize);
+    uLong crc = countCrc(in, hdr.size);
     if(flags & F_VERBOSE)
         fprintf(stderr, "%s: crc32: 0x%08lX; orig: 0x%08X\n", argv[0], crc, unpackData.checksum);
 
@@ -168,13 +202,13 @@ int main(int argc, char **argv)
             argv[0], unpackData.checksum, crc
         );
         if(! (flags & F_FORCE))
-            return crc;
+            return onexit(crc);
     }
     else
         print_ok();
 
     FileUnion *current = header->files;
-    off_t filestart = headerSize + 4;
+    off_t filestart = hdr.size + 4;
     File *after = &header->files[header->headerSize].file;
     FileName *fn = (FileName*)after;
 
@@ -182,13 +216,13 @@ int main(int argc, char **argv)
 
     //decode data from header
     uint32_t fnLength = fn->fileNameLength;
-    unsigned char *data = (unsigned char*)malloc(getDataOutputSize(fn->fileNameLength) + 1);
+    data = (unsigned char*)malloc(getDataOutputSize(fn->fileNameLength) + 1);
     err = decryptData(&fn->fileName, &fnLength, data, unpackData.fileNameKey, 32);
     if(err != DD_OK)
     {
         print_fail();
         fprintf(stderr, "%s: Error while decrypting file name (errorcode: %d)", argv[0], err);
-        return err;
+        return onexit(err);
     }
     memcpy((void*)&fn->fileName,data, fnLength);
 
@@ -197,12 +231,14 @@ int main(int argc, char **argv)
     // write decrypted header to file
     if(flags & F_HEADEROUT && hdrout)
     {
-        fwrite(&headerSize, 4, 1, hdrout);
-        fwrite(header, headerSize, 1, hdrout);
+        fwrite(&hdr.size, 4, 1, hdrout);
+        fwrite(header, hdr.size, 1, hdrout);
         fclose(hdrout);
+        hdrout = NULL;
     }
 
     // unpack files
+    output = (unsigned char*)malloc(0x4000);
     int fileid;
     for(fileid = 0; fileid < header->headerSize; fileid++)
     {
@@ -229,13 +265,14 @@ int main(int argc, char **argv)
         print_status("Creating directory structure at '%s'", dirName);
 
         //create directory according to header
-        char *outFile = (char*)malloc(strlen(sdcDir)+strlen((char*)dirName)+2);
+        outFile = (char*)realloc(outFile, strlen(sdcDir)+strlen((char*)dirName)+2);
         sprintf(outFile,"%s/%s",sdcDir,(char*)dirName);
         int ret = createDir(outFile);
         if(ret != 0)
         {
             print_fail();
             fprintf(stderr,"%s: Directory '%s' creation failed with errno: %d\n",argv[0], outFile,errno);
+            return onexit(ret); // exit program on error
         }
 
         print_ok();
@@ -263,18 +300,16 @@ int main(int argc, char **argv)
         //open output file
         outFile = (char*)realloc(outFile, strlen(sdcDir)+strlen((char*)dirName)+strlen(baseName)+3);
         sprintf(outFile,"%s/%s/%s",sdcDir,(char*)dirName,baseName);
-        FILE *out = fopen(outFile,"w");
+        out = fopen(outFile,"w");
         if(out == NULL)
         {
             //error opening a file
             print_fail();
             perror(outFile);
-            return errno;
+            return onexit(errno);
         }
 
         //memory cleanup
-        free(outFile);
-        outFile = NULL;
         //free(sdcDir);//FIXME: SIGABRT
         sdcDir = NULL;
         free(dirName);
@@ -283,7 +318,7 @@ int main(int argc, char **argv)
         //ensure we are after header
         int r;
         if((r = fseek(in,filestart,SEEK_SET))!=0)
-            return r;
+            return onexit(r);
 
         //create inflate struct
         z_stream stream;
@@ -303,7 +338,7 @@ int main(int argc, char **argv)
         {
             print_fail();
             fprintf(stderr,"inflateInit failed with errorcode %d (%s)\n",r,stream.msg);
-            return r;
+            return onexit(r);
         }
         //read from file
         unsigned int bytesToRead;
@@ -315,9 +350,8 @@ int main(int argc, char **argv)
         {
             bytesToRead = current->file.compressedSize & 0x3fff;
         }
-        unsigned char *input = (unsigned char*)malloc(bytesToRead);
-        unsigned char *output = (unsigned char*)malloc(0x4000);
-        void *tmp = malloc(bytesToRead);
+        input = (unsigned char*)realloc(input, bytesToRead);
+        tmp = realloc(tmp, bytesToRead);
 
         //determine file size
         unsigned int bytesRemaining = 0;
@@ -343,7 +377,7 @@ int main(int argc, char **argv)
 
             result = fread(input+stream.avail_in,1,bytesToRead-stream.avail_in,in);
             if(result == 0 && stream.avail_in == 0)	//stop only if stream iflated whole previous buffer
-                return 1;				//still have bytes remaining but container end reached
+                return onexit(1);				//still have bytes remaining but container end reached
 
             //decode
             stream.next_in = (Bytef*)input;
@@ -357,7 +391,7 @@ int main(int argc, char **argv)
             {
                 print_fail();
                 fprintf(stderr,"inflate failed with errorcode %d (%s)\n",r,stream.msg);
-                return r;
+                return onexit(r);
             }
 
             //XOR
@@ -386,12 +420,7 @@ int main(int argc, char **argv)
             print_ok();
 
         fclose(out);
-        free(tmp);
-        tmp = NULL;
-        free(input);
-        input = NULL;
-        free(output);
-        output = NULL;
+        out = NULL;
 
         if(header->headerSignature == SIG_ELARGE)
             filestart += current->file4gb.compressedSize;
@@ -400,13 +429,5 @@ int main(int argc, char **argv)
         current++;
     }
 
-    free(unpackData.unformatted);
-    unpackData.unformatted = NULL;
-    unpackData.fileNameKey = NULL;
-    unpackData.headerKey = NULL;
-
-    free(header);
-
-    fclose(in);
-    return 0;
+    return onexit(0);
 }
