@@ -72,13 +72,8 @@ UnpackStatus fillUnpackStruct(UnpackData *unpackData, void *edv)
 
 uint32_t getDataOutputSize(uint32_t inputSize)
 {
-    uint32_t size;
-
-    size = inputSize % 8;
-    if (size != 0)
-        return inputSize + 8 - size;
-    else
-        return inputSize;
+    uint32_t size = inputSize % 8;
+    return (size != 0) ? inputSize + 8 - size : inputSize;
 }
 
 DecrError decryptData(void *buffer, uint32_t *bufferSize, void *outputBuffer, void *key, uint32_t keyLength)
@@ -126,7 +121,7 @@ DecrError decryptData(void *buffer, uint32_t *bufferSize, void *outputBuffer, vo
 
 ulong countCrc(FILE *f, uint32_t hdrSize)
 {
-    void *buffer = malloc(0x1000);
+    char buffer[0x1000];
     uLong crc = crc32(0L, Z_NULL, 0);
     fseek(f, hdrSize+4, SEEK_SET);
     size_t bytes = 0;
@@ -134,7 +129,6 @@ ulong countCrc(FILE *f, uint32_t hdrSize)
     {
         crc = crc32(crc, (Bytef*)buffer, bytes);
     }
-    free(buffer);
     return crc;
 }
 
@@ -163,7 +157,7 @@ uint64_t winTimeToUnix(uint64_t win)
            5040;		//fixing
 }
 
-void unixTimeToStr(char *buffer, size_t bufSize, uint64_t time)
+void unixTimeToStr(char *buffer, size_t bufSize, time_t time)
 {
     if(bufSize < 20)
     {
@@ -174,7 +168,7 @@ void unixTimeToStr(char *buffer, size_t bufSize, uint64_t time)
     strftime(buffer, bufSize, "%Y/%m/%d %H:%M:%S", ts);
 }
 
-int createDir(char* dir)
+int createDir(const char* dir)
 {
     DIR *f = NULL;
     if((f = opendir(dir)) == NULL)
@@ -214,7 +208,6 @@ int createDir(char* dir)
         // directory exists
         closedir(f);
     }
-    f = NULL;
     return 0;
 }
 

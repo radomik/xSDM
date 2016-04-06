@@ -40,7 +40,7 @@ int main(int argc, char **argv)
     //For now should be _reliably_ done with manual code analysis/correction
     uint8_t flags = 0;
     const char *sdcFile = NULL;
-    int option;
+    int option, result;
     while((option = getopt_long(argc, argv, "fvH:Vh", options, 0)) != -1)
     {
         switch(option)
@@ -67,8 +67,7 @@ int main(int argc, char **argv)
                 // note that perror() here may not print errno from unsuccessful
                 // call to fopen() because print_fail() (printf()) may change its
                 // value to SUCCESS
-                // perror argument type is const char*
-                perror(hdrout);
+                perror(optarg);
                 return onexit(errno);
             }
             print_ok();
@@ -98,9 +97,7 @@ int main(int argc, char **argv)
     }
 
     print_status("Opening SDC file");
-    int result;
-    in = fopen(sdcFile,"r");
-    if(in == NULL)
+    if(! (in = fopen(sdcFile,"r")))
     {
         //error opening a file
         print_fail();
@@ -152,7 +149,7 @@ int main(int argc, char **argv)
         uint8_t  buf[4];
         uint32_t size;
     } hdr;
-    fread(hdr.buf,1,4,in);
+    fread(hdr.buf,1,sizeof(hdr.buf),in);
 
     print_status("Validating SDC header");
 
@@ -178,8 +175,6 @@ int main(int argc, char **argv)
     }
 
     //check if valid sdc file
-    fseeko(in,0,SEEK_END);
-    off_t sdcSize = ftello(in);//FIXME: check if still needed
     if((sizeof(Header) + (sizeof(File) * header->headerSize)) > hdr.size)
     {
         printf("[ FAIL ]\n");
@@ -246,8 +241,7 @@ int main(int argc, char **argv)
     int fileid;
     for(fileid = 0; fileid < header->headerSize; fileid++)
     {
-        char *filename = (char*)(&fn->fileName);
-        filename += current->file.fileNameOffset;
+        char *filename = (char*)(&fn->fileName) + current->file.fileNameOffset;
         uint32_t fn_size = strlen(filename);
 
         if(flags & F_VERBOSE)
@@ -284,19 +278,19 @@ int main(int argc, char **argv)
         if(flags & F_VERBOSE)
         {
 #define TIMESIZE	20
-        char crtime[TIMESIZE];
-        time_t creation = winTimeToUnix(current->file.creationTime);
-        unixTimeToStr(crtime, TIMESIZE, creation);
+            char crtime[TIMESIZE];
+            time_t creation = winTimeToUnix(current->file.creationTime);
+            unixTimeToStr(crtime, TIMESIZE, creation);
 
-        char actime[TIMESIZE];
-        time_t access = winTimeToUnix(current->file.accessTime);
-        unixTimeToStr(actime, TIMESIZE, access);
+            char actime[TIMESIZE];
+            time_t access = winTimeToUnix(current->file.accessTime);
+            unixTimeToStr(actime, TIMESIZE, access);
 
-        char mdtime[TIMESIZE];
-        time_t modification = winTimeToUnix(current->file.modificationTime);
-        unixTimeToStr(mdtime, TIMESIZE, modification);
+            char mdtime[TIMESIZE];
+            time_t modification = winTimeToUnix(current->file.modificationTime);
+            unixTimeToStr(mdtime, TIMESIZE, modification);
 
-        fprintf(stderr, "File has been originally created at %s, last accessed at %s and modified at %s\n", crtime, actime, mdtime);
+            fprintf(stderr, "File has been originally created at %s, last accessed at %s and modified at %s\n", crtime, actime, mdtime);
         }
 
         print_status("Unpacking '%s'", baseName);

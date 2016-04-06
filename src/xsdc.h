@@ -102,7 +102,7 @@ typedef enum
   DD_ERR	//uidentified error
 } DecrError;
 
-typedef enum 
+typedef enum
 {
   PH_LONG = 0,
   PH_SHORT
@@ -167,12 +167,12 @@ uint64_t winTimeToUnix(uint64_t win);
  * converts unix timestamp to string in format "%Y/%m/%d %H:%M:%S"
  * if BUFSZIE is too small returns empty string
  */
-void unixTimeToStr(char *buffer, size_t bufSize, uint64_t time);
+void unixTimeToStr(char *buffer, size_t bufSize, time_t time);
 
 /*
  * create directory, if its root directory does not exist, create it recursively
  */
-int createDir(char* dir);
+int createDir(const char* dir);
 
 /*
  * print progress of current task (0-6)
