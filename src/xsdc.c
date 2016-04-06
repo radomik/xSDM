@@ -135,7 +135,11 @@ ulong countCrc(FILE *f, uint32_t hdrSize)
 DecrError loadHeader(FILE *f, Header *hdr, uint32_t hdrSize, UnpackData *ud)
 {
     void *data = malloc(hdrSize);
-    fread(data,1,hdrSize,f);
+    if (fread(data,1,hdrSize,f) != hdrSize)
+    {
+        free(data);
+        return DD_HD;
+    }
     DecrError err = decryptData(data, &hdrSize, hdr, ud->headerKey, 32);
     free(data);
     return err;

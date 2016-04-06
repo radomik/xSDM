@@ -99,6 +99,7 @@ typedef enum
   DD_IE,	//encryption init error
   DD_DE,	//decryption error
   DD_DIE,	//encryption deinit error
+  DD_HD,	//header read error
   DD_ERR	//uidentified error
 } DecrError;
 

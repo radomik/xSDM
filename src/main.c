@@ -125,7 +125,12 @@ int main(int argc, char **argv)
     int unformattedLength = ftell(key);
     fseek(key,0,SEEK_SET);
     unformatted = malloc(unformattedLength+1);
-    fread(unformatted,1,unformattedLength,key);
+
+    if (fread(unformatted,1,unformattedLength,key) != unformattedLength)
+    {
+        fprintf(stderr, "%s: Error reading key file [%s]\n", argv[0], strerror(errno));
+        return onexit(-1);
+    }
     ((unsigned char *)unformatted)[unformattedLength] = '\0';
     fclose(key);
     key = NULL;
@@ -149,7 +154,12 @@ int main(int argc, char **argv)
         uint8_t  buf[4];
         uint32_t size;
     } hdr;
-    fread(hdr.buf,1,sizeof(hdr.buf),in);
+
+    if (fread(hdr.buf,1,sizeof(hdr.buf),in) != sizeof(hdr.buf))
+    {
+        fprintf(stderr, "%s: Error reading SDC header [%s]\n", argv[0], strerror(errno));
+        return onexit(-1);
+    }
 
     print_status("Validating SDC header");
 
@@ -220,7 +230,7 @@ int main(int argc, char **argv)
     if(err != DD_OK)
     {
         print_fail();
-        fprintf(stderr, "%s: Error while decrypting file name (errorcode: %d)", argv[0], err);
+        fprintf(stderr, "%s: Error while decrypting file name (errorcode: %d)\n", argv[0], err);
         return onexit(err);
     }
     memcpy((void*)&fn->fileName,data, fnLength);
@@ -368,8 +378,16 @@ int main(int argc, char **argv)
             }
 
             result = fread(input+stream.avail_in,1,bytesToRead-stream.avail_in,in);
-            if(result == 0 && stream.avail_in == 0)	//stop only if stream iflated whole previous buffer
-                return onexit(1);				//still have bytes remaining but container end reached
+            if(result < 0)
+            {
+                fprintf(stderr, "%s: Error reading SDC file [%s]\n", argv[0], strerror(errno));
+                return onexit(-1);
+            }
+            if(result == 0 && stream.avail_in == 0) //stop only if stream iflated whole previous buffer
+            {                                       //still have bytes remaining but container end reached
+                fprintf(stderr, "%s: Warning. Still have bytes remaining but container end reached\n", argv[0]);
+                return onexit(1);
+            }
 
             //decode
             stream.next_in = (Bytef*)input;
